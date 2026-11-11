@@ -45,6 +45,7 @@ public:
     static Mesh createLiquidVolume(float baseRadius, float shoulderRadius, float neckRadius, float totalHeight, float neckHeight, int slices = 48);
     static Mesh createTeardropFlame(float radius = 0.05f, float height = 0.18f, int slices = 16);
     static Mesh createDisk(float radius = 0.25f, int rings = 16, int sectors = 48);
+    static Mesh createBillboard(float size = 1.0f);
 };
 
 #endif // MESH_H
