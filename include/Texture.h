@@ -14,6 +14,14 @@ public:
     Texture();
     ~Texture();
 
+    // Prevent double-free from shallow copy
+    Texture(const Texture&) = delete;
+    Texture& operator=(const Texture&) = delete;
+
+    // Move semantics for proper OpenGL texture handle transfer
+    Texture(Texture&& other) noexcept;
+    Texture& operator=(Texture&& other) noexcept;
+
     void bind(GLuint slot = 0) const;
     void unbind() const;
 

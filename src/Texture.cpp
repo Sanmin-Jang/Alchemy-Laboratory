@@ -12,6 +12,29 @@ Texture::~Texture() {
     }
 }
 
+Texture::Texture(Texture&& other) noexcept
+    : id(other.id), width(other.width), height(other.height) {
+    other.id = 0;
+    other.width = 0;
+    other.height = 0;
+}
+
+Texture& Texture::operator=(Texture&& other) noexcept {
+    if (this != &other) {
+        if (id != 0) {
+            glDeleteTextures(1, &id);
+        }
+        id = other.id;
+        width = other.width;
+        height = other.height;
+
+        other.id = 0;
+        other.width = 0;
+        other.height = 0;
+    }
+    return *this;
+}
+
 void Texture::bind(GLuint slot) const {
     glActiveTexture(GL_TEXTURE0 + slot);
     glBindTexture(GL_TEXTURE_2D, id);
