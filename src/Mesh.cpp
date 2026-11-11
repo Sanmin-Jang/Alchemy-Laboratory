@@ -436,3 +436,17 @@ Mesh Mesh::createDisk(float radius, int rings, int sectors) {
     mesh.setupMesh(vertices, indices);
     return mesh;
 }
+
+Mesh Mesh::createBillboard(float size) {
+    Mesh mesh;
+    float h = size * 0.5f;
+    std::vector<Vertex> vertices = {
+        { {-h, -h, 0.0f}, {0, 0, 1}, {0.0f, 0.0f} },
+        { { h, -h, 0.0f}, {0, 0, 1}, {1.0f, 0.0f} },
+        { { h,  h, 0.0f}, {0, 0, 1}, {1.0f, 1.0f} },
+        { {-h,  h, 0.0f}, {0, 0, 1}, {0.0f, 1.0f} }
+    };
+    std::vector<unsigned int> indices = { 0, 1, 2, 2, 3, 0 };
+    mesh.setupMesh(vertices, indices);
+    return mesh;
+}
