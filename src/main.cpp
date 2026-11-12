@@ -33,6 +33,8 @@ int frameCount = 0;
 float fpsAccumulator = 0.0f;
 float currentFPS = 60.0f;
 std::chrono::high_resolution_clock::time_point lastFrameTime;
+bool testMode = false;
+int testFrameCounter = 0;
 
 void updateWindowTitle() {
     int fillPercent = (int)(scene.slosh.fillLevel * 100.0f);
@@ -59,6 +61,7 @@ void printHelp() {
     std::cout << "                               5: Auric Gold (Philosopher's Tincture)\n";
     std::cout << "                               6: Frost Cyan (Glacial Infusion)\n";
     std::cout << " [C]                         : Cycle potion colors smoothly\n";
+    std::cout << " [L]                         : Toggle candle flames on / off\n";
     std::cout << " [+] / [-]                   : Increase / decrease liquid fill level\n";
     std::cout << " [R]                         : Reset flask position and settle fluid\n";
     std::cout << " [V]                         : Reset camera view\n";
@@ -107,6 +110,15 @@ void timer(int value) {
 
     // Advance physical slosh simulation
     scene.update(dt);
+
+    if (testMode) {
+        testFrameCounter++;
+        if (testFrameCounter >= 10) {
+            std::cout << "[Test Mode] Successfully initialized and rendered 10 frames cleanly!" << std::endl;
+            glutLeaveMainLoop();
+            return;
+        }
+    }
 
     glutPostRedisplay();
     glutTimerFunc(16, timer, 0); // Target ~60 FPS
@@ -172,9 +184,9 @@ void mouseMotion(int x, int y) {
                 Vec3 hitPoint = rayOrigin + rayDir * t;
                 Vec3 newPos = (hitPoint - Vec3(0.0f, 0.22f, 0.0f)) + dragPlaneOffset;
 
-                // Clamp to screen view boundaries
+                // Clamp to screen view boundaries (cannot go below table surface y = 0.0f)
                 newPos.x = std::max(-1.8f, std::min(1.8f, newPos.x));
-                newPos.y = std::max(-1.0f, std::min(1.0f, newPos.y));
+                newPos.y = std::max(0.0f, std::min(1.2f, newPos.y));
                 newPos.z = std::max(-1.5f, std::min(1.5f, newPos.z));
 
                 scene.onFlaskDrag(newPos);
@@ -237,6 +249,11 @@ void keyboard(unsigned char key, int x, int y) {
             std::cout << "[Alchemy] Cycled potion color to: " << scene.colorName << "\n";
             updateWindowTitle();
             break;
+        case 'l':
+        case 'L':
+            scene.toggleCandles();
+            std::cout << "[Candles] Candle flames " << (scene.candlesLit ? "IGNITED" : "EXTINGUISHED") << "!\n";
+            break;
         case '+':
         case '=':
             scene.adjustLiquidLevel(0.05f);
@@ -270,6 +287,12 @@ void keyboard(unsigned char key, int x, int y) {
 }
 
 int main(int argc, char** argv) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--test") {
+            testMode = true;
+        }
+    }
+
     std::cout << "========================================================\n";
     std::cout << " Starting Alchemist's Potion Lab (Dynamic Slosh Demo)   \n";
     std::cout << " OpenGL 3.3 Core Profile | C++14                        \n";
