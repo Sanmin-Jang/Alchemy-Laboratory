@@ -1,72 +1,100 @@
-# ⚗️ Alchemist's Potion Lab (Лаборатория Алхимика)
+# ⚗️ Alchemist's Potion Lab
 
-Интерактивная 3D сцена алхимической лаборатории с физической симуляцией жидкости в колбе, атмосферным столом, свечами с процедурным мерцанием и динамическим освещением.
-Проект разработан на **C++14** и **OpenGL 3.3 Core Profile** с использованием шейдеров **GLSL**.
+An interactive 3D alchemy laboratory featuring physically simulated liquid inside a glass flask, an atmospheric wooden workbench, procedurally animated candle flames, and dynamic lighting.
 
----
-
-## ✨ Основные возможности (Features)
-
-### 1. 🪵 Алхимический дубовый стол и окружение
-* **Массивная деревянная столешница** с процедурной текстурой волокон и годовых колец состаренного тёмного дуба.
-* **Анатомия стола:** 4 устойчивые деревянные ножки, продольные и поперечные царги (подстолье).
-* **Лабораторное окружение:** каменный пол из тёсаных плит и задняя стена старинного алхимического подземелья.
-* **Старинный пергамент:** лежащий на столе алхимический манускрипт с рецептами эликсиров.
-* **Магический рунический круг:** инкрустированный в стол под колбой круг трансмутации, светящийся в такт магии зелья и реагирующий на взбалтывание колбы.
-
-### 2. 🕯️ Атмосферные свечи и живое пламя
-* **Две группы свечей:**
-  * Слева: трио восковых свечей разной высоты на античном латунном блюдце с каплями расплавленного воска.
-  * Справа: пара тонких свечей на металлической подставке.
-* **Восковой материал:** Blinn-Phong шейдинг с тёплым подповерхностным рассеиванием воска слоновой кости и обугленными фитилями.
-* **Процедурная анимация пламени (`flame.vert` / `flame.frag`):**
-  * Каплевидная 3D геометрия пламени.
-  * Индивидуальные гармоники покачивания пламени (каждая свеча мерцает независимо).
-  * Градиент нагрева: бело-голубое ядро -> золотой огонь -> тёмно-оранжевый кончик.
-* **Ореол свечения (Glow Halo):** мягкий аддитивный радиальный ореол вокруг каждого пламени, создающий реалистичный эффект рассеяния света в тёмном помещении.
-* **Включение / выключение свечей:** клавиша `[L]`.
-
-### 3. 💡 Динамическое освещение (Point Lights)
-* **Источник света 1 (Левый кластер):** тёплый янтарный свет с нелинейным процедурным мерцанием.
-* **Источник света 2 (Правый кластер):** золотистый свет свечей.
-* **Источник света 3 (Эликсир):** мягкое магическое свечение, исходящее прямо из колбы и освещающее деревянный стол, руны и саму колбу в цвет текущего зелья.
-* **Блики на стекле:** колба Эрленмейера отражает танцующие языки пламени свечей, усиливая глубину и фотореализм.
-
-### 4. 🧪 Физика жидкости (Slosh Physics)
-* Симуляция затухающих гармонических колебаний свободной поверхности жидкости при ускорениях и перемещении колбы.
-* Волновые возмущения и рябь на поверхности при взбалтывании.
-* Всплывающие микропузырьки и светящийся мениск на границе стекла.
-* Интерактивное перемещение колбы мышкой по столу и в воздухе.
-* 6 готовых рецептов алхимических эликсиров (Изумрудный, Рубиновый, Сапфировый, Аметистовый, Золотой, Ледяной) с плавным переливанием цвета.
+The project is developed using **C++14**, **OpenGL 3.3 Core Profile**, and **GLSL shaders**.
 
 ---
 
-## 🎮 Управление (Controls)
+## ✨ Features
 
-| Клавиша / Действие | Функция |
+### 1. 🪵 Alchemical Oak Table & Environment
+
+- **Massive wooden tabletop** featuring procedural wood grain and aged dark oak growth rings.
+- **Detailed table structure:** four sturdy wooden legs, longitudinal and transverse support beams.
+- **Laboratory environment:** stone-tiled floor and an ancient alchemist's dungeon wall.
+- **Antique parchment:** an old alchemical manuscript with handwritten potion recipes resting on the table.
+- **Magical rune circle:** an illuminated transmutation circle embedded into the tabletop beneath the flask. Its glow pulses with the potion's magic and reacts to flask movement.
+
+### 2. 🕯️ Atmospheric Candles & Living Flames
+
+- **Two candle arrangements:**
+  - Left side: three wax candles of different heights on an antique brass plate with melted wax details.
+  - Right side: two slender candles on a metal candle holder.
+- **Wax material:** Blinn-Phong shading with warm subsurface scattering, ivory-colored wax, and charred wicks.
+- **Procedural flame animation (`flame.vert` / `flame.frag`):**
+  - Teardrop-shaped 3D flame geometry.
+  - Independent harmonic flickering and swaying for each candle.
+  - Temperature-based color gradient: blue-white core → golden flame → dark orange tip.
+- **Glow Halo:** soft, additive radial glow surrounding each flame, creating realistic light scattering in the dark environment.
+- **Candle control:** toggle all candles on or off using the `[L]` key.
+
+### 3. 💡 Dynamic Lighting (Point Lights)
+
+- **Light Source 1 – Left Candle Cluster:** warm amber illumination with nonlinear procedural flickering.
+- **Light Source 2 – Right Candle Cluster:** golden candlelight illuminating the surrounding environment.
+- **Light Source 3 – Magical Elixir:** soft magical illumination emitted directly from the flask, lighting the wooden table, runes, and flask itself according to the potion's current color.
+- **Glass reflections:** the Erlenmeyer flask reflects the dancing candle flames, enhancing depth and visual realism.
+
+### 4. 🧪 Liquid Physics (Slosh Physics)
+
+- Simulation of damped harmonic oscillations of the liquid's free surface in response to acceleration and flask movement.
+- Wave disturbances and surface ripples when shaking the flask.
+- Rising micro-bubbles and a glowing meniscus along the glass boundary.
+- Interactive flask manipulation using the mouse, allowing movement across the table and through the air.
+- **Six predefined alchemical potion recipes**, each with a unique color and magical appearance:
+  - Emerald Elixir
+  - Ruby Elixir
+  - Sapphire Elixir
+  - Amethyst Elixir
+  - Golden Elixir
+  - Ice Elixir
+- Smooth color transitions when switching between potions.
+
+---
+
+## 🎮 Controls
+
+| Key / Action | Function |
 |---|---|
-| **ЛКМ (Зажать и тянуть)** | Схватить колбу и перемещать её (жидкость плещется по законам физики) |
-| **ПКМ (Зажать и тянуть)** | Вращать 3D камеру вокруг сцены |
-| **Колёсико мыши** | Приближение / отдаление камеры (Zoom) |
-| **Пробел (Space)** | Взболтать / перемешать эликсир |
-| **[1] - [6]** | Сменить цвет и тип зелья (Эликсир жизни, Дыхание дракона, Эссенция маны и др.) |
-| **[C]** | Плавное циклическое переключение цветов зелья |
-| **[L]** | Зажечь / потушить свечи (переключение атмосферного света) |
-| **[+] / [-]** | Увеличить / уменьшить уровень заполнения колбы жидкостью |
-| **[R]** | Сбросить положение колбы в центр стола и успокоить жидкость |
-| **[V]** | Сбросить ракурс камеры в исходное состояние |
-| **[H]** | Вывести справку по управлению в консоль |
-| **[ESC]** | Выход из приложения |
+| **Left Mouse Button (Hold & Drag)** | Grab and move the flask. The liquid reacts with physically simulated sloshing. |
+| **Right Mouse Button (Hold & Drag)** | Rotate the 3D camera around the scene. |
+| **Mouse Wheel** | Zoom in and out. |
+| **Space** | Shake and mix the potion. |
+| **[1] – [6]** | Switch between potion types and colors (Life Elixir, Dragon's Breath, Mana Essence, etc.). |
+| **[C]** | Automatically cycle through potion colors. |
+| **[L]** | Toggle candles on and off. |
+| **[+] / [-]** | Increase or decrease the liquid level inside the flask. |
+| **[R]** | Reset the flask to the center of the table and calm the liquid. |
+| **[V]** | Reset the camera to its default view. |
+| **[H]** | Display the control instructions in the console. |
+| **[ESC]** | Exit the application. |
 
 ---
 
-## 🛠️ Сборка и запуск (Build & Run)
+## 🛠️ Build & Run
 
-### Требования
-* Windows 10 / 11
-* CMake 3.10+
-* Visual Studio (MSVC) с поддержкой C++14 или новее
+### Requirements
 
-### Быстрый старт:
-1. Запустите `build.bat` для автоматической сборки проекта в режиме Release через CMake.
-2. Запустите `run.bat` для старта приложения.
+- Windows 10 / 11
+- CMake 3.10 or newer
+- Visual Studio with MSVC and C++14 support (or newer)
+
+### Quick Start
+
+1. Run `build.bat` to automatically configure and build the project in **Release** mode using CMake.
+2. Run `run.bat` to launch the application.
+
+---
+
+## 🧰 Technologies
+
+- **C++14** – Core application logic and physics simulation.
+- **OpenGL 3.3 Core Profile** – 3D rendering pipeline.
+- **GLSL** – Custom vertex and fragment shaders.
+- **CMake** – Project configuration and build system.
+- **Visual Studio / MSVC** – Compilation environment.
+
+---
+
+*Enter the world of alchemy, experiment with magical elixirs, and bring your own potion laboratory to life!* ⚗️
