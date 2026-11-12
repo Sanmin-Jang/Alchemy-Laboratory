@@ -15,6 +15,15 @@ uniform float uWaveAmp;
 uniform float uWavePhase;
 uniform bool uIsTopCap;
 
+struct PointLight {
+    vec3 position;
+    vec3 color;
+    float intensity;
+};
+
+#define NUM_LIGHTS 2
+uniform PointLight uLights[NUM_LIGHTS];
+
 float getInnerFlaskRadius(float y) {
     float r = 0.05;
     if (y <= 0.02) {
@@ -103,6 +112,20 @@ void main() {
     // Ambient + subtle directional curvature shading
     float diff = max(dot(norm, keyDir), 0.0) * 0.35 + 0.65;
 
-    vec3 finalColor = baseColor * diff + meniscusHighlight + bubbleSparkle + specularGlint;
+    // Candle lighting illumination on liquid surface
+    vec3 candleLighting = vec3(0.0);
+    for (int i = 0; i < NUM_LIGHTS; ++i) {
+        if (uLights[i].intensity <= 0.0) continue;
+        vec3 lDir = uLights[i].position - vFragPos;
+        float dist = length(lDir);
+        lDir = normalize(lDir);
+        float d = max(dot(norm, lDir), 0.0);
+        vec3 h = normalize(lDir + viewDir);
+        float s = pow(max(dot(norm, h), 0.0), specPower);
+        float atten = 1.0 / (1.0 + 0.30 * dist + 0.20 * dist * dist);
+        candleLighting += (d * baseColor * 0.35 + s * vec3(1.0, 0.9, 0.7) * 0.5) * uLights[i].color * (uLights[i].intensity * atten);
+    }
+
+    vec3 finalColor = baseColor * diff + meniscusHighlight + bubbleSparkle + specularGlint + candleLighting;
     FragColor = vec4(finalColor, uLiquidColor.a);
 }
