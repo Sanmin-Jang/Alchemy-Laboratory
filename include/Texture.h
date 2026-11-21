@@ -34,9 +34,13 @@ public:
     static Texture createParchmentTexture(int size = 512);
     static Texture createRuneCircleTexture(int size = 512);
     static Texture createMortarStoneTexture(int size = 256);
+    static Texture createBookLeatherTexture(int size = 256);
+    static Texture createWindowTexture(int size = 256);
+    static Texture createParticleTexture(int size = 128);
+    static Texture createFromRGBA(int w, int h, const std::vector<unsigned char>& data, bool nearestFilter = false);
 
 private:
-    void initFromRGBA(int w, int h, const std::vector<unsigned char>& data);
+    void initFromRGBA(int w, int h, const std::vector<unsigned char>& data, bool nearestFilter = false);
 };
 
 #endif // TEXTURE_H

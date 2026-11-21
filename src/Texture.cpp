@@ -44,7 +44,7 @@ void Texture::unbind() const {
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void Texture::initFromRGBA(int w, int h, const std::vector<unsigned char>& data) {
+void Texture::initFromRGBA(int w, int h, const std::vector<unsigned char>& data, bool nearestFilter) {
     if (id != 0) {
         glDeleteTextures(1, &id);
     }
@@ -55,14 +55,26 @@ void Texture::initFromRGBA(int w, int h, const std::vector<unsigned char>& data)
     glBindTexture(GL_TEXTURE_2D, id);
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    if (nearestFilter) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    } else {
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
 
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+Texture Texture::createFromRGBA(int w, int h, const std::vector<unsigned char>& data, bool nearestFilter) {
+    Texture tex;
+    tex.initFromRGBA(w, h, data, nearestFilter);
+    return tex;
 }
 
 bool Texture::loadBMP(const std::string& path) {
@@ -99,9 +111,9 @@ bool Texture::loadBMP(const std::string& path) {
         for (int x = 0; x < width; ++x) {
             int srcIndex = (y * width + x) * bytesPerPixel;
             int dstIndex = (y * width + x) * 4;
-            rgba[dstIndex + 0] = rawData[srcIndex + 2]; // R
-            rgba[dstIndex + 1] = rawData[srcIndex + 1]; // G
-            rgba[dstIndex + 2] = rawData[srcIndex + 0]; // B
+            rgba[dstIndex + 0] = rawData[srcIndex + 2];
+            rgba[dstIndex + 1] = rawData[srcIndex + 1];
+            rgba[dstIndex + 2] = rawData[srcIndex + 0];
             rgba[dstIndex + 3] = (bytesPerPixel == 4) ? rawData[srcIndex + 3] : 255;
         }
     }
@@ -119,22 +131,15 @@ Texture Texture::createWoodTexture(int size) {
             float u = (float)x / size;
             float v = (float)y / size;
 
-            // Wood grain rings + fiber noise
             float dist = std::sqrt(std::pow(u - 0.5f, 2.0f) + std::pow(v * 0.2f - 0.1f, 2.0f));
             float ring = std::sin(dist * 60.0f + std::sin(u * 20.0f) * 1.5f);
             float fiber = std::sin(y * 1.8f) * 0.1f + std::sin(x * 0.05f) * 0.05f;
-            float val = 0.5f + 0.35f * ring + fiber;
-            val = std::max(0.0f, std::min(1.0f, val));
-
-            // Dark antique oak palette
-            unsigned char r = (unsigned char)(val * 75.0f + 40.0f);
-            unsigned char g = (unsigned char)(val * 45.0f + 25.0f);
-            unsigned char b = (unsigned char)(val * 25.0f + 15.0f);
+            float val = std::max(0.0f, std::min(1.0f, 0.5f + 0.35f * ring + fiber));
 
             int idx = (y * size + x) * 4;
-            data[idx + 0] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
+            data[idx + 0] = (unsigned char)(val * 78.0f + 42.0f);
+            data[idx + 1] = (unsigned char)(val * 46.0f + 24.0f);
+            data[idx + 2] = (unsigned char)(val * 26.0f + 14.0f);
             data[idx + 3] = 255;
         }
     }
@@ -157,25 +162,19 @@ Texture Texture::createStoneWallTexture(int size) {
 
             int row = (int)(v * brickRows);
             float rowOffset = (row % 2 == 1) ? 0.5f / brickCols : 0.0f;
-            int col = (int)((u + rowOffset) * brickCols);
-
             float localU = std::fmod((u + rowOffset) * brickCols, 1.0f);
             float localV = std::fmod(v * brickRows, 1.0f);
 
-            // Mortar joints
             bool isMortar = (localU < 0.05f || localV < 0.07f);
-
-            float noise = (std::sin(x * 0.3f) + std::cos(y * 0.4f)) * 0.1f;
-            float base = isMortar ? 0.25f : (0.55f + noise);
-
-            unsigned char r = (unsigned char)(base * 90.0f);
-            unsigned char g = (unsigned char)(base * 85.0f);
-            unsigned char b = (unsigned char)(base * 95.0f);
+            float noise = (std::sin(x * 0.3f) + std::cos(y * 0.4f)) * 0.10f
+                        + std::sin((x + y) * 0.17f) * 0.05f;
+            float base = isMortar ? 0.24f : (0.56f + noise);
+            base = std::max(0.15f, std::min(1.0f, base));
 
             int idx = (y * size + x) * 4;
-            data[idx + 0] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
+            data[idx + 0] = (unsigned char)(base * 92.0f);
+            data[idx + 1] = (unsigned char)(base * 88.0f);
+            data[idx + 2] = (unsigned char)(base * 100.0f);
             data[idx + 3] = 255;
         }
     }
@@ -193,19 +192,29 @@ Texture Texture::createParchmentTexture(int size) {
             float u = (float)x / size;
             float v = (float)y / size;
 
-            float stain = std::sin(u * 8.0f) * std::cos(v * 9.0f) * 0.15f +
-                          std::sin(u * 25.0f + v * 30.0f) * 0.05f;
-            float edgeVig = 1.0f - 1.2f * (std::pow(u - 0.5f, 2.0f) + std::pow(v - 0.5f, 2.0f));
-            float factor = std::max(0.4f, std::min(1.0f, edgeVig + stain));
+            float stain = std::sin(u * 8.0f) * std::cos(v * 9.0f) * 0.14f +
+                          std::sin(u * 25.0f + v * 30.0f) * 0.04f;
+            float edgeVig = 1.0f - 1.1f * (std::pow(u - 0.5f, 2.0f) + std::pow(v - 0.5f, 2.0f));
+            float factor = std::max(0.42f, std::min(1.0f, edgeVig + stain));
 
-            unsigned char r = (unsigned char)(factor * 180.0f);
-            unsigned char g = (unsigned char)(factor * 155.0f);
-            unsigned char b = (unsigned char)(factor * 115.0f);
+            float ink = 0.0f;
+            bool borderV = (std::fabs(u - 0.08f) < 0.008f || std::fabs(u - 0.92f) < 0.008f) && (v > 0.08f && v < 0.92f);
+            bool borderH = (std::fabs(v - 0.08f) < 0.008f || std::fabs(v - 0.92f) < 0.008f) && (u > 0.08f && u < 0.92f);
+            if (borderV || borderH) ink = 0.65f;
+
+            float dc = std::sqrt(std::pow(u - 0.30f, 2.0f) + std::pow(v - 0.65f, 2.0f));
+            if (std::fabs(dc - 0.14f) < 0.009f || std::fabs(dc - 0.09f) < 0.006f) ink = 0.72f;
+
+            if (u > 0.50f && u < 0.86f && v > 0.22f && v < 0.80f) {
+                float lineWave = std::sin(v * 75.0f);
+                float wordBreak = std::sin(u * 42.0f + std::floor(v * 12.0f) * 2.1f);
+                if (lineWave > 0.65f && wordBreak > -0.25f) ink = 0.55f;
+            }
 
             int idx = (y * size + x) * 4;
-            data[idx + 0] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
+            data[idx + 0] = (unsigned char)std::max(0.0f, std::min(255.0f, factor * 195.0f * (1.0f - ink * 0.72f)));
+            data[idx + 1] = (unsigned char)std::max(0.0f, std::min(255.0f, factor * 168.0f * (1.0f - ink * 0.78f)));
+            data[idx + 2] = (unsigned char)std::max(0.0f, std::min(255.0f, factor * 122.0f * (1.0f - ink * 0.82f)));
             data[idx + 3] = 255;
         }
     }
@@ -226,36 +235,23 @@ Texture Texture::createRuneCircleTexture(int size) {
             float dx = (float)x - center;
             float dy = (float)y - center;
             float r = std::sqrt(dx * dx + dy * dy);
-            float angle = std::atan2(dy, dx); // [-PI, PI]
+            float angle = std::atan2(dy, dx);
 
-            float intensity = 0.0f;
-
-            // Concentric rings
             float ring1 = std::exp(-std::pow((r - maxR * 0.95f) / 2.5f, 2.0f));
             float ring2 = std::exp(-std::pow((r - maxR * 0.82f) / 1.8f, 2.0f));
             float ring3 = std::exp(-std::pow((r - maxR * 0.60f) / 2.0f, 2.0f));
             float ring4 = std::exp(-std::pow((r - maxR * 0.35f) / 1.5f, 2.0f));
 
-            // Radial arcane spokes (8-fold symmetry)
             float spoke = std::pow(std::cos(angle * 8.0f), 16.0f) * (r < maxR * 0.95f && r > maxR * 0.35f ? 1.0f : 0.0f);
-
-            // Outer runic notches
             float notches = std::pow(std::cos(angle * 32.0f), 8.0f) * (r < maxR * 0.95f && r > maxR * 0.82f ? 0.7f : 0.0f);
 
-            intensity = ring1 + ring2 + ring3 + ring4 + spoke * 0.8f + notches * 0.6f;
-            intensity = std::min(1.0f, intensity);
-
-            // Magical emerald / cyan rune glow
-            unsigned char cr = (unsigned char)(intensity * 50.0f);
-            unsigned char cg = (unsigned char)(intensity * 255.0f);
-            unsigned char cb = (unsigned char)(intensity * 180.0f);
-            unsigned char ca = (unsigned char)(intensity * 230.0f);
+            float intensity = std::min(1.0f, ring1 + ring2 + ring3 + ring4 + spoke * 0.8f + notches * 0.6f);
 
             int idx = (y * size + x) * 4;
-            data[idx + 0] = cr;
-            data[idx + 1] = cg;
-            data[idx + 2] = cb;
-            data[idx + 3] = ca;
+            data[idx + 0] = (unsigned char)(intensity * 255.0f);
+            data[idx + 1] = (unsigned char)(intensity * 255.0f);
+            data[idx + 2] = (unsigned char)(intensity * 255.0f);
+            data[idx + 3] = (unsigned char)(intensity * 240.0f);
         }
     }
 
@@ -279,6 +275,101 @@ Texture Texture::createMortarStoneTexture(int size) {
             data[idx + 1] = (unsigned char)(c * 0.95f);
             data[idx + 2] = (unsigned char)(c * 0.90f);
             data[idx + 3] = 255;
+        }
+    }
+
+    tex.initFromRGBA(size, size, data);
+    return tex;
+}
+
+Texture Texture::createBookLeatherTexture(int size) {
+    Texture tex;
+    std::vector<unsigned char> data(size * size * 4);
+
+    for (int y = 0; y < size; ++y) {
+        for (int x = 0; x < size; ++x) {
+            float u = (float)x / size;
+            float v = (float)y / size;
+            float grain = (std::sin(x * 0.9f + std::cos(y * 0.7f)) + std::sin(y * 1.4f)) * 0.07f;
+            bool goldTrim = (u < 0.08f || u > 0.92f || v < 0.08f || v > 0.92f) &&
+                            (u > 0.04f && u < 0.96f && v > 0.04f && v < 0.96f);
+            float dc = std::sqrt(std::pow(u - 0.5f, 2.0f) + std::pow(v - 0.5f, 2.0f));
+            bool goldEmblem = std::fabs(dc - 0.22f) < 0.022f;
+
+            int idx = (y * size + x) * 4;
+            if (goldTrim || goldEmblem) {
+                data[idx + 0] = 218;
+                data[idx + 1] = 178;
+                data[idx + 2] = 74;
+            } else {
+                float shade = std::max(0.3f, std::min(1.0f, 0.75f + grain));
+                data[idx + 0] = (unsigned char)(shade * 165.0f);
+                data[idx + 1] = (unsigned char)(shade * 155.0f);
+                data[idx + 2] = (unsigned char)(shade * 150.0f);
+            }
+            data[idx + 3] = 255;
+        }
+    }
+
+    tex.initFromRGBA(size, size, data);
+    return tex;
+}
+
+Texture Texture::createWindowTexture(int size) {
+    Texture tex;
+    std::vector<unsigned char> data(size * size * 4);
+
+    for (int y = 0; y < size; ++y) {
+        for (int x = 0; x < size; ++x) {
+            float u = (float)x / size;
+            float v = (float)y / size;
+            float dx = (u - 0.5f) * 2.0f;
+            bool inArch = (v < 0.62f) ? (std::fabs(dx) < 0.82f)
+                                      : (dx * dx + std::pow((v - 0.62f) / 0.34f, 2.0f) < 0.68f);
+            bool bar = (std::fabs(u - 0.5f) < 0.03f) ||
+                       (std::fabs(v - 0.36f) < 0.025f) ||
+                       (std::fabs(v - 0.62f) < 0.025f);
+
+            int idx = (y * size + x) * 4;
+            if (!inArch || bar) {
+                data[idx + 0] = 18;
+                data[idx + 1] = 20;
+                data[idx + 2] = 28;
+                data[idx + 3] = 255;
+            } else {
+                float moonDist = std::sqrt(std::pow(u - 0.60f, 2.0f) + std::pow(v - 0.72f, 2.0f));
+                float moon = std::exp(-moonDist * moonDist * 55.0f);
+                float sky = 0.25f + 0.45f * v + moon * 0.95f;
+                data[idx + 0] = (unsigned char)std::min(255.0f, sky * 115.0f + moon * 130.0f);
+                data[idx + 1] = (unsigned char)std::min(255.0f, sky * 155.0f + moon * 110.0f);
+                data[idx + 2] = (unsigned char)std::min(255.0f, sky * 235.0f + moon * 50.0f);
+                data[idx + 3] = 255;
+            }
+        }
+    }
+
+    tex.initFromRGBA(size, size, data);
+    return tex;
+}
+
+Texture Texture::createParticleTexture(int size) {
+    Texture tex;
+    std::vector<unsigned char> data(size * size * 4);
+
+    for (int y = 0; y < size; ++y) {
+        for (int x = 0; x < size; ++x) {
+            float u = ((float)x + 0.5f) / size * 2.0f - 1.0f;
+            float v = ((float)y + 0.5f) / size * 2.0f - 1.0f;
+            float r2 = u * u + v * v;
+            float alpha = (r2 >= 1.0f) ? 0.0f : std::exp(-r2 * 3.8f) * (1.0f - r2);
+            unsigned char c = (unsigned char)std::min(255.0f, (0.80f + 0.20f * alpha) * 255.0f);
+            unsigned char a = (unsigned char)std::min(255.0f, alpha * 255.0f);
+
+            int idx = (y * size + x) * 4;
+            data[idx + 0] = c;
+            data[idx + 1] = c;
+            data[idx + 2] = c;
+            data[idx + 3] = a;
         }
     }
 

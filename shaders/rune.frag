@@ -6,17 +6,30 @@ uniform sampler2D uRuneTexture;
 uniform vec3 uRuneColor;
 uniform float uTime;
 uniform float uActivity;
+uniform float uRotation;
 
 void main() {
-    vec4 tex = texture(uRuneTexture, vTexCoords);
+    // Rotate UVs around circle center (0.5, 0.5)
+    vec2 centered = vTexCoords - vec2(0.5);
+    float c = cos(uRotation);
+    float s = sin(uRotation);
+    vec2 rotUV = vec2(centered.x * c - centered.y * s,
+                      centered.x * s + centered.y * c) + vec2(0.5);
+
+    if (rotUV.x < 0.0 || rotUV.x > 1.0 || rotUV.y < 0.0 || rotUV.y > 1.0) {
+        discard;
+    }
+
+    vec4 tex = texture(uRuneTexture, rotUV);
     if (tex.a < 0.05) {
         discard;
     }
 
-    // Gentle arcane pulse
-    float pulse = 0.85 + 0.35 * sin(uTime * 3.0 + length(vTexCoords - vec2(0.5)) * 10.0);
-    float glow = (0.5 + 0.8 * uActivity) * pulse;
+    // Arcane radial pulse wave
+    float r = length(centered);
+    float pulse = 0.85 + 0.35 * sin(uTime * 3.5 - r * 14.0);
+    float glow = (0.45 + 1.35 * uActivity) * pulse;
 
-    vec3 finalRuneColor = mix(tex.rgb, uRuneColor, 0.7) * glow;
-    FragColor = vec4(finalRuneColor, tex.a * 0.9);
+    vec3 finalRuneColor = mix(tex.rgb, uRuneColor, 0.80) * glow;
+    FragColor = vec4(finalRuneColor, tex.a * clamp(0.65 + 0.35 * uActivity, 0.0, 1.0));
 }
