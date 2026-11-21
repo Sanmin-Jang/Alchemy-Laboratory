@@ -1,0 +1,23 @@
+# Build outputs
+build/
+out/
+*.exe
+*.dll
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+!deps/lib/*.lib
+!deps/bin/*.dll
+
+# IDE & OS files
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln
+*.vcxproj*
+*.log
+Thumbs.db
+.DS_Store
