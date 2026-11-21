@@ -46,6 +46,7 @@ public:
     static Mesh createTeardropFlame(float radius = 0.05f, float height = 0.18f, int slices = 16);
     static Mesh createDisk(float radius = 0.25f, int rings = 16, int sectors = 48);
     static Mesh createBillboard(float size = 1.0f);
+    static Mesh createTorus(float majorRadius, float minorRadius, int majorSegs = 32, int minorSegs = 16);
 };
 
 #endif // MESH_H
