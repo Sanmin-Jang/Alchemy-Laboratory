@@ -1,25 +1,24 @@
 #include "Scene.h"
 #include <algorithm>
 #include <cmath>
-#include <iostream>
-#include <fstream>
 
 Scene::Scene()
     : flaskPos(0.0f, 0.0f, 0.0f),
       isDragging(false),
       timeElapsed(0.0f),
-      potionName("Alchemy Elixir"),
-      colorName("Emerald"),
-      currentColorIndex(1),
-      targetLiquidColor(0.12f, 0.95f, 0.35f, 0.90f),
+      runeRotation(0.0f),
+      targetLiquidColor(0.22f, 0.65f, 0.72f, 0.88f),
       candlesLit(true),
       candleFlicker0(1.0f),
-      candleFlicker1(1.0f) {}
+      candleFlicker1(1.0f),
+      bubbleTimer(0.0f),
+      steamTimer(0.0f),
+      effectParticleTimer(0.0f) {}
 
 Scene::~Scene() {}
 
 void Scene::init() {
-    // 1. Compile and link modern GLSL shaders
+    // 1. Load GLSL 330 core shaders
     glassShader.load("shaders/flask_glass.vert", "shaders/flask_glass.frag");
     liquidShader.load("shaders/flask_liquid.vert", "shaders/flask_liquid.frag");
     corkShader.load("shaders/cork.vert", "shaders/cork.frag");
@@ -28,65 +27,77 @@ void Scene::init() {
     runeShader.load("shaders/rune.vert", "shaders/rune.frag");
     glowShader.load("shaders/glow.vert", "shaders/glow.frag");
 
-    // 2. Generate procedural textures
-    woodTex = Texture::createWoodTexture(512);
-    stoneTex = Texture::createStoneWallTexture(512);
-    parchmentTex = Texture::createParchmentTexture(512);
+    // 2. Initialize subsystems
+    env.init();
+    potions.init();
+    particles.init();
     runeTex = Texture::createRuneCircleTexture(512);
 
-    // 3. Generate glassware & liquid geometry meshes
-    flaskMesh = Mesh::createErlenmeyerFlask(0.22f, 0.085f, 0.05f, 0.46f, 0.15f, 48);
-    liquidMesh = Mesh::createLiquidVolume(0.22f, 0.085f, 0.05f, 0.46f, 0.15f, 48);
-    diskMesh = Mesh::createDisk(0.25f, 16, 48);
-    corkMesh = Mesh::createCylinder(0.046f, 0.052f, 0.06f, 32, true, true);
+    // 3. Build main Erlenmeyer flask & ingredient bottle geometry
+    flaskMesh     = Mesh::createErlenmeyerFlask(0.22f, 0.085f, 0.05f, 0.46f, 0.15f, 48);
+    liquidMesh    = Mesh::createLiquidVolume(0.22f, 0.085f, 0.05f, 0.46f, 0.15f, 48);
+    diskMesh      = Mesh::createDisk(0.25f, 16, 48);
+    corkMesh      = Mesh::createCylinder(0.046f, 0.052f, 0.06f, 32, true, true);
+    runePlaneMesh = Mesh::createPlane(0.92f, 0.92f, 1.0f, 1.0f);
+    shockwaveMesh = Mesh::createTorus(1.0f, 0.06f, 40, 12);
 
-    // 4. Generate table and environment meshes
-    tableTopMesh = Mesh::createBox(2.8f, 0.07f, 1.6f, 2.2f, 1.6f);
-    tableLegMesh = Mesh::createBox(0.10f, 1.0f, 0.10f, 0.3f, 2.0f);
-    tableApronLongMesh = Mesh::createBox(2.36f, 0.08f, 0.05f, 2.0f, 0.2f);
-    tableApronShortMesh = Mesh::createBox(0.05f, 0.08f, 1.21f, 0.2f, 1.2f);
-    floorMesh = Mesh::createPlane(14.0f, 14.0f, 7.0f, 7.0f);
-    backWallMesh = Mesh::createPlane(14.0f, 5.0f, 7.0f, 3.0f);
-    runePlaneMesh = Mesh::createPlane(0.82f, 0.82f, 1.0f, 1.0f);
-    parchmentPlaneMesh = Mesh::createPlane(0.42f, 0.32f, 1.0f, 1.0f);
+    // Smaller reagent vials for the 3 base ingredients
+    smallBottleGlassMesh  = Mesh::createErlenmeyerFlask(0.095f, 0.045f, 0.026f, 0.25f, 0.08f, 28);
+    smallBottleLiquidMesh = Mesh::createCylinder(0.086f, 0.052f, 0.145f, 24, true, true);
+    smallBottleCorkMesh   = Mesh::createCylinder(0.024f, 0.028f, 0.038f, 16, true, true);
 
-    // 5. Generate candle components
-    candleWaxUnitMesh = Mesh::createCylinder(1.0f, 0.94f, 1.0f, 24, true, true);
-    candleSaucerLeftMesh = Mesh::createCylinder(0.19f, 0.21f, 0.018f, 32, true, true);
-    candleSaucerRightMesh = Mesh::createCylinder(0.15f, 0.17f, 0.016f, 28, true, true);
-    candleWickMesh = Mesh::createCylinder(0.003f, 0.002f, 0.022f, 8, true, true);
-    flameMesh = Mesh::createTeardropFlame(0.025f, 0.18f, 16);
-    billboardMesh = Mesh::createBillboard(1.0f);
-    waxDropMesh = Mesh::createSphere(0.022f, 10, 12);
-
-    // 6. Define candle placement on the laboratory table
-    candles.clear();
-    // Left candle cluster (Trio on antique brass saucer)
-    candles.push_back({ Vec3(-0.72f, 0.018f, -0.15f), 0.28f, 0.032f, 0.0f, 0.90f }); // Tall main candle
-    candles.push_back({ Vec3(-0.63f, 0.018f, -0.07f), 0.18f, 0.029f, 2.7f, 0.78f }); // Medium candle
-    candles.push_back({ Vec3(-0.80f, 0.018f, -0.22f), 0.11f, 0.033f, 5.1f, 0.68f }); // Short melted candle
-
-    // Right candle cluster (Pair on brass/iron saucer)
-    candles.push_back({ Vec3(0.73f, 0.016f, -0.18f), 0.23f, 0.028f, 1.4f, 0.84f }); // Medium slender candle
-    candles.push_back({ Vec3(0.82f, 0.016f, -0.27f), 0.13f, 0.031f, 3.9f, 0.70f }); // Little stub candle
-
-    // 7. Initialize sloshing physics
+    // 4. Initial liquid state (calm pale azure water waiting for ingredients)
     slosh.currentPos = flaskPos;
     slosh.prevPos = flaskPos;
-    slosh.fillLevel = 0.60f;
+    slosh.fillLevel = 0.25f;
     slosh.liquidColor = targetLiquidColor;
+}
+
+float Scene::getMagicResonance() const {
+    if (potions.activeEffect == EFFECT_ARCANE_NOVA) {
+        return std::min(1.0f, 0.45f + potions.effectTimer / std::max(0.1f, potions.effectDuration));
+    }
+    if (potions.activeEffect == EFFECT_EXPLOSION || potions.activeEffect == EFFECT_GLACIAL_MIST) {
+        return std::min(1.0f, 0.25f + (potions.effectTimer / std::max(0.1f, potions.effectDuration)) * 0.75f);
+    }
+    return potions.canBrew() ? 0.35f : 0.05f;
+}
+
+Vec3 Scene::getBackgroundFogColor() const {
+    Vec3 base(0.035f, 0.040f, 0.068f);
+    float t = (potions.effectDuration > 0.01f) ? (potions.effectTimer / potions.effectDuration) : 0.0f;
+    if (potions.activeEffect == EFFECT_EXPLOSION) {
+        return Vec3::lerp(base, Vec3(0.22f, 0.07f, 0.02f), std::min(1.0f, t * 1.4f));
+    }
+    if (potions.activeEffect == EFFECT_ARCANE_NOVA) {
+        return Vec3::lerp(base, Vec3(0.14f, 0.06f, 0.22f), std::min(1.0f, t * 1.1f));
+    }
+    if (potions.activeEffect == EFFECT_GLACIAL_MIST) {
+        return Vec3::lerp(base, Vec3(0.04f, 0.14f, 0.22f), std::min(1.0f, t * 1.2f));
+    }
+    return base;
+}
+
+Vec3 Scene::getCameraShakeOffset() const {
+    if (potions.shakeTimer <= 0.001f) return Vec3(0.0f, 0.0f, 0.0f);
+    float amp = potions.shakeMagnitude * (potions.shakeTimer / 0.70f);
+    return Vec3(
+        std::sin(timeElapsed * 58.0f) * amp,
+        std::cos(timeElapsed * 71.0f) * amp * 0.7f,
+        std::sin(timeElapsed * 47.0f) * amp * 0.5f
+    );
 }
 
 void Scene::update(float dt) {
     timeElapsed += dt;
 
-    // Smooth color transition
+    // Smooth liquid color transmutation
     slosh.liquidColor = Vec4(
-        Vec3::lerp(slosh.liquidColor.xyz(), targetLiquidColor.xyz(), dt * 4.5f),
+        Vec3::lerp(slosh.liquidColor.xyz(), targetLiquidColor.xyz(), std::min(1.0f, dt * 4.5f)),
         targetLiquidColor.w
     );
 
-    // Dynamic candle flame flickers with superimposed non-repeating harmonics
+    // Non-repeating multi-harmonic candle flickers
     candleFlicker0 = 1.0f
         + 0.14f * std::sin(timeElapsed * 11.3f)
         + 0.09f * std::sin(timeElapsed * 23.7f)
@@ -99,33 +110,103 @@ void Scene::update(float dt) {
         + 0.06f * std::cos(timeElapsed * 37.3f + 2.3f)
         + 0.04f * std::sin(timeElapsed * 8.3f + 1.1f);
 
-    // Update dynamic liquid slosh oscillator (acceleration -> inertia -> damped harmonic motion)
+    // Update subsystems
+    potions.update(dt);
+    float resonance = getMagicResonance();
+    env.update(dt, resonance);
     slosh.update(flaskPos, dt);
+    particles.update(dt, flaskPos);
+
+    // Rotate glowing magic circle faster during active recipe resonance
+    runeRotation += dt * (0.28f + resonance * 1.85f);
+
+    // Continuous bubbles & steam particles (Stretch Goal!)
+    Vec3 mouthPos = flaskPos + Vec3(0.0f, 0.47f, 0.0f);
+    float liquidTopY = 0.46f * slosh.fillLevel;
+
+    bubbleTimer += dt;
+    float bubbleInterval = (potions.activeEffect != EFFECT_NONE) ? 0.045f : 0.16f;
+    if (bubbleTimer >= bubbleInterval && slosh.fillLevel > 0.18f) {
+        bubbleTimer = 0.0f;
+        particles.emitBubble(flaskPos, liquidTopY, slosh.liquidColor.xyz());
+    }
+
+    steamTimer += dt;
+    float steamInterval = (potions.activeEffect != EFFECT_NONE || potions.canBrew()) ? 0.07f : 0.24f;
+    if (steamTimer >= steamInterval && slosh.fillLevel > 0.30f) {
+        steamTimer = 0.0f;
+        particles.emitSteam(mouthPos, slosh.liquidColor.xyz(), 1);
+    }
+
+    // Continuous reaction particles for active brewed combinations
+    if (potions.effectTimer > 0.0f) {
+        effectParticleTimer += dt;
+        if (potions.activeEffect == EFFECT_ARCANE_NOVA && effectParticleTimer >= 0.04f) {
+            effectParticleTimer = 0.0f;
+            particles.emitArcaneSpiral(flaskPos, 3);
+        } else if (potions.activeEffect == EFFECT_GLACIAL_MIST && effectParticleTimer >= 0.045f) {
+            effectParticleTimer = 0.0f;
+            particles.emitFrostMist(flaskPos, 4);
+        } else if (potions.activeEffect == EFFECT_EXPLOSION && potions.effectTimer > 2.0f && effectParticleTimer >= 0.08f) {
+            effectParticleTimer = 0.0f;
+            particles.emitSteam(mouthPos, Vec3(0.95f, 0.42f, 0.12f), 2);
+        }
+    }
 }
 
-void Scene::onFlaskDragStart() {
-    isDragging = true;
-    slosh.addImpulse(0.4f, 0.0f);
+bool Scene::addIngredient(IngredientType type) {
+    Vec3 mixedColor;
+    float newFill = slosh.fillLevel;
+    if (!potions.addIngredient(type, mixedColor, newFill)) return false;
+
+    targetLiquidColor = Vec4(mixedColor, 0.90f);
+    slosh.fillLevel = newFill;
+    slosh.stir(0.75f);
+    slosh.boilIntensity = 0.45f;
+
+    Vec3 mouthPos = flaskPos + Vec3(0.0f, 0.47f, 0.0f);
+    particles.emitSplash(mouthPos, PotionSystem::getIngredientColor(type), 16);
+    particles.emitSteam(mouthPos, mixedColor, 4);
+    return true;
 }
 
-void Scene::onFlaskDrag(const Vec3& newPos) {
-    flaskPos = newPos;
+PotionEffect Scene::brewPotion() {
+    Vec3 resultColor;
+    PotionEffect eff = potions.brew(resultColor);
+    if (eff == EFFECT_NONE) return EFFECT_NONE;
+
+    targetLiquidColor = Vec4(resultColor, 0.92f);
+    slosh.liquidColor = Vec4(Vec3::lerp(slosh.liquidColor.xyz(), resultColor, 0.78f), 0.92f);
+    slosh.stir(1.5f);
+    slosh.boilIntensity = 1.0f;
+
+    Vec3 mouthPos = flaskPos + Vec3(0.0f, 0.47f, 0.0f);
+    if (eff == EFFECT_EXPLOSION) {
+        particles.triggerExplosionBurst(mouthPos);
+    } else if (eff == EFFECT_ARCANE_NOVA) {
+        particles.emitArcaneSpiral(flaskPos, 48);
+        particles.emitSplash(mouthPos, Vec3(1.0f, 0.85f, 0.35f), 32);
+    } else if (eff == EFFECT_GLACIAL_MIST) {
+        particles.emitFrostMist(flaskPos, 60);
+    } else {
+        particles.emitSteam(mouthPos, resultColor, 14);
+        particles.emitSplash(mouthPos, resultColor, 18);
+    }
+    return eff;
 }
 
-void Scene::onFlaskDragEnd() {
-    isDragging = false;
-    slosh.addImpulse(0.0f, 0.35f);
-}
-
+void Scene::onFlaskDragStart() { isDragging = true; slosh.addImpulse(0.4f, 0.0f); }
+void Scene::onFlaskDrag(const Vec3& newPos) { flaskPos = newPos; }
+void Scene::onFlaskDragEnd() { isDragging = false; slosh.addImpulse(0.0f, 0.35f); }
 void Scene::adjustLiquidLevel(float delta) {
-    slosh.fillLevel = std::max(0.10f, std::min(0.92f, slosh.fillLevel + delta));
+    slosh.fillLevel = std::max(0.12f, std::min(0.92f, slosh.fillLevel + delta));
     slosh.stir(0.4f);
 }
-
 void Scene::stirPotion() {
     slosh.stir(1.2f);
+    slosh.boilIntensity = std::max(slosh.boilIntensity, 0.55f);
+    particles.emitSteam(flaskPos + Vec3(0.0f, 0.47f, 0.0f), slosh.liquidColor.xyz(), 4);
 }
-
 void Scene::resetPotion() {
     flaskPos = Vec3(0.0f, 0.0f, 0.0f);
     slosh.currentPos = flaskPos;
@@ -135,96 +216,87 @@ void Scene::resetPotion() {
     slosh.tilt = Vec2(0.0f, 0.0f);
     slosh.tiltVelocity = Vec2(0.0f, 0.0f);
     slosh.waveAmplitude = 0.0f;
-    slosh.fillLevel = 0.60f;
-    setColorPreset(1);
+    slosh.boilIntensity = 0.0f;
+    slosh.fillLevel = 0.25f;
+    targetLiquidColor = Vec4(0.22f, 0.65f, 0.72f, 0.88f);
+    slosh.liquidColor = targetLiquidColor;
+    particles.clearReactionParticles();
+    potions.clearFlask();
 }
-
-void Scene::setColorPreset(int preset) {
-    currentColorIndex = preset;
-    switch (preset) {
-        case 1: // Emerald Green
-            targetLiquidColor = Vec4(0.12f, 0.95f, 0.35f, 0.90f);
-            colorName = "Emerald";
-            break;
-        case 2: // Ruby Crimson
-            targetLiquidColor = Vec4(0.98f, 0.12f, 0.25f, 0.90f);
-            colorName = "Ruby";
-            break;
-        case 3: // Sapphire Blue
-            targetLiquidColor = Vec4(0.12f, 0.65f, 0.98f, 0.90f);
-            colorName = "Sapphire";
-            break;
-        case 4: // Amethyst Purple
-            targetLiquidColor = Vec4(0.72f, 0.15f, 0.98f, 0.90f);
-            colorName = "Amethyst";
-            break;
-        case 5: // Auric Gold
-            targetLiquidColor = Vec4(0.98f, 0.82f, 0.12f, 0.90f);
-            colorName = "Gold";
-            break;
-        case 6: // Frost Cyan
-            targetLiquidColor = Vec4(0.12f, 0.96f, 0.92f, 0.90f);
-            colorName = "Cyan";
-            break;
-        default:
-            break;
-    }
-    slosh.stir(0.45f); // subtle ripple on chemical transmutation
-}
-
-void Scene::cycleColor() {
-    int nextPreset = (currentColorIndex % 6) + 1;
-    setColorPreset(nextPreset);
-}
-
-void Scene::toggleCandles() {
-    candlesLit = !candlesLit;
-}
-
-float Scene::getFlaskRadiusAtHeight(float h) {
-    if (h <= 0.02f) {
-        return 0.22f - (0.22f - 0.209f) * (h / 0.02f);
-    } else if (h <= 0.31f) {
-        float t = (h - 0.02f) / (0.31f - 0.02f);
-        return 0.209f + (0.085f - 0.209f) * t;
-    } else if (h <= 0.34f) {
-        float t = (h - 0.31f) / 0.03f;
-        return 0.085f + (0.05f - 0.085f) * t;
-    }
-    return 0.05f;
-}
+void Scene::toggleCandles() { candlesLit = !candlesLit; }
 
 bool Scene::hitTestFlask(const Vec3& rayOrigin, const Vec3& rayDir, float& outDist) const {
     Vec3 flaskCenter = flaskPos + Vec3(0.0f, 0.23f, 0.0f);
     Vec3 oc = rayOrigin - flaskCenter;
     float b = Vec3::dot(oc, rayDir);
-    float c = Vec3::dot(oc, oc) - 0.32f * 0.32f;
-    float discriminant = b * b - c;
-    if (discriminant > 0.0f) {
-        outDist = -b - std::sqrt(discriminant);
+    float c = Vec3::dot(oc, oc) - 0.28f * 0.28f;
+    float disc = b * b - c;
+    if (disc > 0.0f) {
+        outDist = -b - std::sqrt(disc);
         return outDist > 0.0f;
     }
     return false;
 }
 
-void Scene::setupLights(const Shader& shader, const Vec3& cameraPos) const {
+IngredientType Scene::hitTestIngredient(const Vec3& rayOrigin, const Vec3& rayDir) const {
+    return potions.hitTestBottle(rayOrigin, rayDir);
+}
+
+void Scene::setupStandardLights(const Shader& shader, const Vec3& cameraPos) const {
     shader.setVec3("uViewPos", cameraPos);
 
-    // Light 0: Left candle cluster
-    shader.setVec3("uLights[0].position", Vec3(-0.71f, 0.35f, -0.15f));
+    bool isFrost = (potions.activeEffect == EFFECT_GLACIAL_MIST && potions.effectTimer > 0.0f);
+    float frostFactor = isFrost ? std::min(1.0f, potions.effectTimer / 3.0f) : 0.0f;
+    float candleDim = 1.0f - 0.55f * frostFactor;
+    Vec3 candleCol0 = Vec3::lerp(Vec3(1.0f, 0.74f, 0.38f), Vec3(0.45f, 0.85f, 1.0f), frostFactor * 0.65f);
+    Vec3 candleCol1 = Vec3::lerp(Vec3(1.0f, 0.70f, 0.34f), Vec3(0.45f, 0.82f, 1.0f), frostFactor * 0.65f);
+
+    // Light 0: Left flickering candle cluster
+    shader.setVec3("uLights[0].position", Vec3(-0.87f, 0.36f, -0.18f));
+    shader.setVec3("uLights[0].color", candleCol0);
+    shader.setFloat("uLights[0].intensity", candlesLit ? (1.35f * candleFlicker0 * candleDim) : 0.0f);
+
+    // Light 1: Right flickering candle cluster
+    shader.setVec3("uLights[1].position", Vec3(0.90f, 0.29f, -0.22f));
+    shader.setVec3("uLights[1].color", candleCol1);
+    shader.setFloat("uLights[1].intensity", candlesLit ? (1.15f * candleFlicker1 * candleDim) : 0.0f);
+
+    // Light 2: Dynamic Glowing Potion Light (surges powerfully on completed recipe = WOW MOMENT!)
+    float potionIntensity = 0.85f + 0.18f * std::sin(timeElapsed * 3.5f);
+    if (potions.activeEffect == EFFECT_ARCANE_NOVA) {
+        float t = std::min(1.0f, potions.effectTimer / 2.5f);
+        potionIntensity = 3.85f + 0.65f * std::sin(timeElapsed * 6.0f) * t;
+    } else if (potions.activeEffect == EFFECT_EXPLOSION && potions.effectTimer > 3.5f) {
+        float flash = (potions.effectTimer - 3.5f) / 2.0f;
+        potionIntensity = 1.6f + 4.8f * flash * flash;
+    } else if (potions.activeEffect == EFFECT_GLACIAL_MIST) {
+        potionIntensity = 2.15f + 0.25f * std::sin(timeElapsed * 4.0f);
+    }
+    shader.setVec3("uLights[2].position", flaskPos + Vec3(0.0f, 0.24f, 0.0f));
+    shader.setVec3("uLights[2].color", slosh.liquidColor.xyz() * 1.25f);
+    shader.setFloat("uLights[2].intensity", potionIntensity);
+
+    // Light 3: Atmospheric Gothic Window Moonlight (cool rim light from back wall)
+    shader.setVec3("uLights[3].position", Vec3(0.65f, 1.45f, -1.90f));
+    shader.setVec3("uLights[3].color", Vec3(0.45f, 0.62f, 1.0f));
+    shader.setFloat("uLights[3].intensity", 0.95f);
+
+    // Atmospheric dungeon fog & ambient
+    shader.setVec3("uFogColor", getBackgroundFogColor());
+    shader.setFloat("uFogDensity", isFrost ? 0.19f : 0.105f);
+    Vec3 ambientBase(0.085f, 0.088f, 0.115f);
+    if (potions.activeEffect == EFFECT_ARCANE_NOVA) ambientBase = Vec3(0.16f, 0.11f, 0.22f);
+    else if (isFrost) ambientBase = Vec3(0.07f, 0.14f, 0.20f);
+    shader.setVec3("uAmbientColor", ambientBase);
+}
+
+void Scene::setupCandleLights(const Shader& shader) const {
+    shader.setVec3("uLights[0].position", Vec3(-0.87f, 0.36f, -0.18f));
     shader.setVec3("uLights[0].color", Vec3(1.0f, 0.74f, 0.38f));
     shader.setFloat("uLights[0].intensity", candlesLit ? (1.35f * candleFlicker0) : 0.0f);
-
-    // Light 1: Right candle cluster
-    shader.setVec3("uLights[1].position", Vec3(0.75f, 0.28f, -0.22f));
+    shader.setVec3("uLights[1].position", Vec3(0.90f, 0.29f, -0.22f));
     shader.setVec3("uLights[1].color", Vec3(1.0f, 0.70f, 0.34f));
     shader.setFloat("uLights[1].intensity", candlesLit ? (1.15f * candleFlicker1) : 0.0f);
-
-    // Light 2: Glowing potion elixir
-    shader.setVec3("uLights[2].position", flaskPos + Vec3(0.0f, 0.18f, 0.0f));
-    shader.setVec3("uLights[2].color", slosh.liquidColor.xyz() * 1.25f);
-    float potionPulse = 0.85f + 0.20f * std::sin(timeElapsed * 3.5f);
-    shader.setFloat("uLights[2].intensity", potionPulse);
 }
 
 void Scene::render(const Mat4& view, const Mat4& proj, const Vec3& cameraPos) {
@@ -232,329 +304,77 @@ void Scene::render(const Mat4& view, const Mat4& proj, const Vec3& cameraPos) {
     glDepthFunc(GL_LESS);
     glDepthMask(GL_TRUE);
 
-    // 1. Opaque laboratory environment: wooden workbench, legs, stone floor, back wall
-    renderRoomAndTable(view, proj, cameraPos);
+    // 1. Opaque Dungeon Room, Workbench, Books, Shelf, Astrolabe, Candles, Parchment
+    standardShader.use();
+    standardShader.setMat4("uView", view);
+    standardShader.setMat4("uProjection", proj);
+    setupStandardLights(standardShader, cameraPos);
 
-    // 2. Opaque candle bodies, brass saucers, charred wicks, melted wax drips
-    renderCandles(view, proj, cameraPos);
+    env.renderRoomAndTable(standardShader);
+    env.renderLabProps(standardShader, slosh.liquidColor.xyz(), getMagicResonance());
+    env.renderCandles(standardShader);
+    env.renderParchment(standardShader);
 
-    // 3. Ancient alchemy parchment scroll on table
-    renderParchment(view, proj, cameraPos);
+    // 2. Ingredient Bottles (opaque liquid & cork + semi-transparent glass)
+    renderIngredientBottles(view, proj, cameraPos);
 
-    // 4. Cork stopper
+    // 3. Main Flask Cork (pops & tumbles during Explosion)
     renderCork(view, proj, cameraPos);
 
-    // 5. Mystical glowing runic circle on tabletop
-    renderRuneCircle(view, proj, cameraPos);
+    // 4. Glowing Rotating Magic Rune Circle on Tabletop
+    renderRuneCircle(view, proj);
 
-    // 6. Dynamic sloshing liquid volume
+    // 5. Dynamic Sloshing Liquid Volume in Main Flask
     renderLiquid(view, proj, cameraPos);
 
-    // 7. Transparent glassware with Fresnel and candle reflections
+    // 6. Semi-Transparent Fresnel Glass on Main Flask
     renderGlass(view, proj, cameraPos);
 
-    // 8. Atmospheric candle flames, radial light glows, and potion aura
-    renderFlamesAndGlow(view, proj, cameraPos);
+    // 7. Explosion Shockwave Ring + Candle Flames + Radial Glow Halos
+    renderShockwave(view, proj);
+    bool isFrost = (potions.activeEffect == EFFECT_GLACIAL_MIST && potions.effectTimer > 0.0f);
+    env.renderFlamesAndGlow(flameShader, glowShader, view, proj, timeElapsed,
+                            candlesLit, isFrost, candleFlicker0, candleFlicker1,
+                            flaskPos, slosh.liquidColor.xyz(), getMagicResonance());
+
+    // 8. GPU-Instanced 3D Particle System (Bubbles, Steam, Embers, Smoke, Arcane, Frost, Dust)
+    particles.render(view, proj);
 }
 
-void Scene::renderRoomAndTable(const Mat4& view, const Mat4& proj, const Vec3& cameraPos) {
+static void uploadModelAndNormal(const Shader& s, const Mat4& m) {
+    s.setMat4("uModel", m);
+    float n3[9]; m.getNormalMatrix(n3);
+    s.setMat3("uNormalMatrix", n3);
+}
+
+void Scene::renderIngredientBottles(const Mat4& view, const Mat4& proj, const Vec3& cameraPos) {
     standardShader.use();
     standardShader.setMat4("uView", view);
     standardShader.setMat4("uProjection", proj);
-    setupLights(standardShader, cameraPos);
-    standardShader.setVec3("uEmissive", Vec3(0.0f, 0.0f, 0.0f));
-
-    // 1. Table Top Slab
-    {
-        Mat4 m = Mat4::translate(0.0f, -0.035f, -0.15f);
-        standardShader.setMat4("uModel", m);
-        float n3x3[9];
-        m.getNormalMatrix(n3x3);
-        standardShader.setMat3("uNormalMatrix", n3x3);
-
-        standardShader.setBool("uUseTexture", true);
-        woodTex.bind(0);
-        standardShader.setInt("uTexture", 0);
-
-        standardShader.setVec3("uDiffuseColor", Vec3(1.0f, 0.95f, 0.90f));
-        standardShader.setVec3("uSpecularColor", Vec3(0.18f, 0.14f, 0.10f));
-        standardShader.setFloat("uShininess", 24.0f);
-
-        tableTopMesh.draw();
-    }
-
-    // 2. Table Aprons (Support beams under tabletop)
-    {
-        standardShader.setVec3("uDiffuseColor", Vec3(0.85f, 0.80f, 0.75f));
-        standardShader.setVec3("uSpecularColor", Vec3(0.12f, 0.10f, 0.08f));
-        standardShader.setFloat("uShininess", 16.0f);
-
-        // Front apron
-        Mat4 mf = Mat4::translate(0.0f, -0.105f, 0.48f);
-        standardShader.setMat4("uModel", mf);
-        float nf[9]; mf.getNormalMatrix(nf);
-        standardShader.setMat3("uNormalMatrix", nf);
-        tableApronLongMesh.draw();
-
-        // Back apron
-        Mat4 mb = Mat4::translate(0.0f, -0.105f, -0.78f);
-        standardShader.setMat4("uModel", mb);
-        float nb[9]; mb.getNormalMatrix(nb);
-        standardShader.setMat3("uNormalMatrix", nb);
-        tableApronLongMesh.draw();
-
-        // Left apron
-        Mat4 ml = Mat4::translate(-1.18f, -0.105f, -0.15f);
-        standardShader.setMat4("uModel", ml);
-        float nl[9]; ml.getNormalMatrix(nl);
-        standardShader.setMat3("uNormalMatrix", nl);
-        tableApronShortMesh.draw();
-
-        // Right apron
-        Mat4 mr = Mat4::translate(1.18f, -0.105f, -0.15f);
-        standardShader.setMat4("uModel", mr);
-        float nr[9]; mr.getNormalMatrix(nr);
-        standardShader.setMat3("uNormalMatrix", nr);
-        tableApronShortMesh.draw();
-    }
-
-    // 3. Table Legs
-    {
-        standardShader.setVec3("uDiffuseColor", Vec3(0.90f, 0.85f, 0.80f));
-        standardShader.setVec3("uSpecularColor", Vec3(0.14f, 0.12f, 0.10f));
-        standardShader.setFloat("uShininess", 18.0f);
-
-        const float legX[4] = { -1.18f,  1.18f, -1.18f,  1.18f };
-        const float legZ[4] = {  0.48f,  0.48f, -0.78f, -0.78f };
-
-        for (int i = 0; i < 4; ++i) {
-            Mat4 m = Mat4::translate(legX[i], -0.57f, legZ[i]);
-            standardShader.setMat4("uModel", m);
-            float n3x3[9];
-            m.getNormalMatrix(n3x3);
-            standardShader.setMat3("uNormalMatrix", n3x3);
-            tableLegMesh.draw();
-        }
-    }
-
-    // 4. Laboratory Stone Floor
-    {
-        Mat4 m = Mat4::translate(0.0f, -1.07f, 0.0f);
-        standardShader.setMat4("uModel", m);
-        float n3x3[9];
-        m.getNormalMatrix(n3x3);
-        standardShader.setMat3("uNormalMatrix", n3x3);
-
-        standardShader.setBool("uUseTexture", true);
-        stoneTex.bind(0);
-        standardShader.setInt("uTexture", 0);
-
-        standardShader.setVec3("uDiffuseColor", Vec3(0.65f, 0.62f, 0.60f));
-        standardShader.setVec3("uSpecularColor", Vec3(0.08f, 0.08f, 0.08f));
-        standardShader.setFloat("uShininess", 8.0f);
-
-        floorMesh.draw();
-    }
-
-    // 5. Laboratory Back Stone Wall
-    {
-        Mat4 m = Mat4::translate(0.0f, 1.20f, -2.20f) * Mat4::rotateX((float)M_PI * 0.5f);
-        standardShader.setMat4("uModel", m);
-        float n3x3[9];
-        m.getNormalMatrix(n3x3);
-        standardShader.setMat3("uNormalMatrix", n3x3);
-
-        standardShader.setBool("uUseTexture", true);
-        stoneTex.bind(0);
-        standardShader.setInt("uTexture", 0);
-
-        standardShader.setVec3("uDiffuseColor", Vec3(0.55f, 0.52f, 0.52f));
-        standardShader.setVec3("uSpecularColor", Vec3(0.06f, 0.06f, 0.06f));
-        standardShader.setFloat("uShininess", 6.0f);
-
-        backWallMesh.draw();
-    }
-}
-
-void Scene::renderCandles(const Mat4& view, const Mat4& proj, const Vec3& cameraPos) {
-    standardShader.use();
-    standardShader.setMat4("uView", view);
-    standardShader.setMat4("uProjection", proj);
-    setupLights(standardShader, cameraPos);
-
+    setupStandardLights(standardShader, cameraPos);
     standardShader.setBool("uUseTexture", false);
-    standardShader.setVec3("uEmissive", Vec3(0.0f, 0.0f, 0.0f));
 
-    // 1. Antique Brass Candle Saucers
-    // Left brass saucer
-    {
-        Mat4 m = Mat4::translate(-0.72f, 0.0f, -0.15f);
-        standardShader.setMat4("uModel", m);
-        float n3x3[9]; m.getNormalMatrix(n3x3);
-        standardShader.setMat3("uNormalMatrix", n3x3);
+    for (size_t i = 0; i < potions.bottles.size(); ++i) {
+        const auto& b = potions.bottles[i];
+        Mat4 mParent = potions.getBottleModelMatrix(i, flaskPos);
 
-        standardShader.setVec3("uDiffuseColor", Vec3(0.72f, 0.58f, 0.26f));
-        standardShader.setVec3("uSpecularColor", Vec3(0.95f, 0.85f, 0.55f));
+        // Child 1: Glowing liquid volume
+        uploadModelAndNormal(standardShader, mParent * Mat4::translate(0.0f, 0.008f, 0.0f));
+        standardShader.setVec3("uDiffuseColor", b.color);
+        standardShader.setVec3("uSpecularColor", Vec3(0.85f, 0.85f, 0.90f));
         standardShader.setFloat("uShininess", 48.0f);
+        standardShader.setVec3("uEmissive", b.color * 0.42f);
+        smallBottleLiquidMesh.draw();
 
-        candleSaucerLeftMesh.draw();
-    }
-    // Right brass saucer
-    {
-        Mat4 m = Mat4::translate(0.76f, 0.0f, -0.22f);
-        standardShader.setMat4("uModel", m);
-        float n3x3[9]; m.getNormalMatrix(n3x3);
-        standardShader.setMat3("uNormalMatrix", n3x3);
-
-        standardShader.setVec3("uDiffuseColor", Vec3(0.65f, 0.54f, 0.28f));
-        standardShader.setVec3("uSpecularColor", Vec3(0.90f, 0.80f, 0.50f));
-        standardShader.setFloat("uShininess", 40.0f);
-
-        candleSaucerRightMesh.draw();
+        // Child 2: Cork stopper
+        uploadModelAndNormal(standardShader, mParent * Mat4::translate(0.0f, 0.235f, 0.0f));
+        standardShader.setVec3("uDiffuseColor", Vec3(0.65f, 0.46f, 0.28f));
+        standardShader.setVec3("uSpecularColor", Vec3(0.06f, 0.05f, 0.04f));
+        standardShader.setFloat("uShininess", 6.0f);
+        standardShader.setVec3("uEmissive", Vec3(0.0f, 0.0f, 0.0f));
+        smallBottleCorkMesh.draw();
     }
 
-    // 2. Candle Wax Bodies & Charred Wicks
-    for (const auto& c : candles) {
-        // Wax cylinder
-        Mat4 mWax = Mat4::translate(c.position) * Mat4::scale(c.radius, c.height, c.radius);
-        standardShader.setMat4("uModel", mWax);
-        float nWax[9]; mWax.getNormalMatrix(nWax);
-        standardShader.setMat3("uNormalMatrix", nWax);
-
-        standardShader.setVec3("uDiffuseColor", Vec3(0.92f, 0.88f, 0.77f)); // creamy beeswax ivory
-        standardShader.setVec3("uSpecularColor", Vec3(0.20f, 0.18f, 0.15f));
-        standardShader.setFloat("uShininess", 12.0f);
-
-        candleWaxUnitMesh.draw();
-
-        // Charred dark candle wick
-        Mat4 mWick = Mat4::translate(c.position + Vec3(0.0f, c.height, 0.0f));
-        standardShader.setMat4("uModel", mWick);
-        float nWick[9]; mWick.getNormalMatrix(nWick);
-        standardShader.setMat3("uNormalMatrix", nWick);
-
-        standardShader.setVec3("uDiffuseColor", Vec3(0.10f, 0.08f, 0.06f));
-        standardShader.setVec3("uSpecularColor", Vec3(0.0f, 0.0f, 0.0f));
-        standardShader.setFloat("uShininess", 1.0f);
-
-        candleWickMesh.draw();
-    }
-
-    // 3. Melted wax beads around candle bases
-    standardShader.setVec3("uDiffuseColor", Vec3(0.90f, 0.86f, 0.75f));
-    standardShader.setVec3("uSpecularColor", Vec3(0.18f, 0.16f, 0.14f));
-    standardShader.setFloat("uShininess", 10.0f);
-
-    const Vec3 dripPositions[5] = {
-        Vec3(-0.68f, 0.019f, -0.11f),
-        Vec3(-0.76f, 0.019f, -0.19f),
-        Vec3(-0.58f, 0.019f, -0.05f),
-        Vec3( 0.70f, 0.017f, -0.15f),
-        Vec3( 0.78f, 0.017f, -0.24f)
-    };
-    for (int i = 0; i < 5; ++i) {
-        Mat4 mDrop = Mat4::translate(dripPositions[i]) * Mat4::scale(1.2f, 0.35f, 1.2f);
-        standardShader.setMat4("uModel", mDrop);
-        float nDrop[9]; mDrop.getNormalMatrix(nDrop);
-        standardShader.setMat3("uNormalMatrix", nDrop);
-        waxDropMesh.draw();
-    }
-}
-
-void Scene::renderParchment(const Mat4& view, const Mat4& proj, const Vec3& cameraPos) {
-    standardShader.use();
-    standardShader.setMat4("uView", view);
-    standardShader.setMat4("uProjection", proj);
-    setupLights(standardShader, cameraPos);
-
-    standardShader.setBool("uUseTexture", true);
-    parchmentTex.bind(0);
-    standardShader.setInt("uTexture", 0);
-
-    Mat4 m = Mat4::translate(0.54f, 0.0015f, 0.20f) * Mat4::rotateY(-0.28f);
-    standardShader.setMat4("uModel", m);
-    float n3x3[9];
-    m.getNormalMatrix(n3x3);
-    standardShader.setMat3("uNormalMatrix", n3x3);
-
-    standardShader.setVec3("uDiffuseColor", Vec3(1.0f, 0.98f, 0.92f));
-    standardShader.setVec3("uSpecularColor", Vec3(0.04f, 0.04f, 0.04f));
-    standardShader.setFloat("uShininess", 4.0f);
-    standardShader.setVec3("uEmissive", Vec3(0.0f, 0.0f, 0.0f));
-
-    parchmentPlaneMesh.draw();
-}
-
-void Scene::renderRuneCircle(const Mat4& view, const Mat4& proj, const Vec3& cameraPos) {
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE); // Additive blending for luminous arcane glow
-
-    runeShader.use();
-    runeShader.setMat4("uView", view);
-    runeShader.setMat4("uProjection", proj);
-    runeShader.setFloat("uTime", timeElapsed);
-
-    float runeActivity = std::min(1.0f, slosh.waveAmplitude * 8.0f + (isDragging ? 0.35f : 0.0f));
-    runeShader.setFloat("uActivity", runeActivity);
-    runeShader.setVec3("uRuneColor", slosh.liquidColor.xyz());
-
-    runeTex.bind(0);
-    runeShader.setInt("uRuneTexture", 0);
-
-    // Situated right beneath the flask's resting position on the table
-    Mat4 m = Mat4::translate(0.0f, 0.001f, 0.0f);
-    runeShader.setMat4("uModel", m);
-
-    runePlaneMesh.draw();
-
-    glDisable(GL_BLEND);
-}
-
-void Scene::renderLiquid(const Mat4& view, const Mat4& proj, const Vec3& cameraPos) {
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    liquidShader.use();
-    liquidShader.setMat4("uView", view);
-    liquidShader.setMat4("uProjection", proj);
-    liquidShader.setVec3("uCameraPos", cameraPos);
-
-    liquidShader.setVec4("uLiquidColor", slosh.liquidColor);
-    liquidShader.setFloat("uFillLevel", slosh.fillLevel);
-    liquidShader.setVec3("uSloshNormal", slosh.getSurfaceNormal());
-    liquidShader.setFloat("uFlaskMaxHeight", 0.46f);
-    liquidShader.setFloat("uTime", timeElapsed);
-    liquidShader.setFloat("uWaveAmp", slosh.waveAmplitude);
-    liquidShader.setFloat("uWavePhase", slosh.wavePhase);
-
-    // Candle lighting illumination on liquid surface
-    liquidShader.setVec3("uLights[0].position", Vec3(-0.71f, 0.35f, -0.15f));
-    liquidShader.setVec3("uLights[0].color", Vec3(1.0f, 0.74f, 0.38f));
-    liquidShader.setFloat("uLights[0].intensity", candlesLit ? (1.35f * candleFlicker0) : 0.0f);
-
-    liquidShader.setVec3("uLights[1].position", Vec3(0.75f, 0.28f, -0.22f));
-    liquidShader.setVec3("uLights[1].color", Vec3(1.0f, 0.70f, 0.34f));
-    liquidShader.setFloat("uLights[1].intensity", candlesLit ? (1.15f * candleFlicker1) : 0.0f);
-
-    // Both liquid volume body and top surface disk share the exact same model matrix
-    Mat4 mLiquidModel = Mat4::translate(flaskPos);
-    liquidShader.setMat4("uModel", mLiquidModel);
-    float n3x3[9];
-    mLiquidModel.getNormalMatrix(n3x3);
-    liquidShader.setMat3("uNormalMatrix", n3x3);
-
-    // Pass 1: Render main conical liquid body
-    liquidShader.setBool("uIsTopCap", false);
-    liquidMesh.draw();
-
-    // Pass 2: Render top sloshing surface cap disk
-    liquidShader.setBool("uIsTopCap", true);
-    diskMesh.draw();
-
-    glDisable(GL_BLEND);
-}
-
-void Scene::renderGlass(const Mat4& view, const Mat4& proj, const Vec3& cameraPos) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_CULL_FACE);
@@ -563,32 +383,13 @@ void Scene::renderGlass(const Mat4& view, const Mat4& proj, const Vec3& cameraPo
     glassShader.setMat4("uView", view);
     glassShader.setMat4("uProjection", proj);
     glassShader.setVec3("uCameraPos", cameraPos);
+    setupCandleLights(glassShader);
 
-    // Candle reflections glinting on glass
-    glassShader.setVec3("uLights[0].position", Vec3(-0.71f, 0.35f, -0.15f));
-    glassShader.setVec3("uLights[0].color", Vec3(1.0f, 0.74f, 0.38f));
-    glassShader.setFloat("uLights[0].intensity", candlesLit ? (1.35f * candleFlicker0) : 0.0f);
-
-    glassShader.setVec3("uLights[1].position", Vec3(0.75f, 0.28f, -0.22f));
-    glassShader.setVec3("uLights[1].color", Vec3(1.0f, 0.70f, 0.34f));
-    glassShader.setFloat("uLights[1].intensity", candlesLit ? (1.15f * candleFlicker1) : 0.0f);
-
-    Mat4 mFlask = Mat4::translate(flaskPos);
-    glassShader.setMat4("uModel", mFlask);
-    float n3x3[9];
-    mFlask.getNormalMatrix(n3x3);
-    glassShader.setMat3("uNormalMatrix", n3x3);
-
-    // Pass 1: Render back-faces (inner glass reflections)
-    glCullFace(GL_FRONT);
-    glassShader.setBool("uIsBackPass", true);
-    flaskMesh.draw();
-
-    // Pass 2: Render front-faces (Fresnel highlights, candle reflections, and laboratory specularity)
-    glCullFace(GL_BACK);
-    glassShader.setBool("uIsBackPass", false);
-    flaskMesh.draw();
-
+    for (size_t i = 0; i < potions.bottles.size(); ++i) {
+        uploadModelAndNormal(glassShader, potions.getBottleModelMatrix(i, flaskPos));
+        glCullFace(GL_FRONT); glassShader.setBool("uIsBackPass", true);  smallBottleGlassMesh.draw();
+        glCullFace(GL_BACK);  glassShader.setBool("uIsBackPass", false); smallBottleGlassMesh.draw();
+    }
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
 }
@@ -598,81 +399,72 @@ void Scene::renderCork(const Mat4& view, const Mat4& proj, const Vec3& cameraPos
     corkShader.setMat4("uView", view);
     corkShader.setMat4("uProjection", proj);
     corkShader.setVec3("uCameraPos", cameraPos);
+    setupCandleLights(corkShader);
 
-    // Candle lighting for cork stopper
-    corkShader.setVec3("uLights[0].position", Vec3(-0.71f, 0.35f, -0.15f));
-    corkShader.setVec3("uLights[0].color", Vec3(1.0f, 0.74f, 0.38f));
-    corkShader.setFloat("uLights[0].intensity", candlesLit ? (1.35f * candleFlicker0) : 0.0f);
-
-    corkShader.setVec3("uLights[1].position", Vec3(0.75f, 0.28f, -0.22f));
-    corkShader.setVec3("uLights[1].color", Vec3(1.0f, 0.70f, 0.34f));
-    corkShader.setFloat("uLights[1].intensity", candlesLit ? (1.15f * candleFlicker1) : 0.0f);
-
-    // Cork sits in the neck mouth (hierarchical child of flaskPos)
-    Mat4 mCork = Mat4::translate(flaskPos) * Mat4::translate(0.0f, 0.44f, 0.0f);
-    corkShader.setMat4("uModel", mCork);
-    float n3x3[9];
-    mCork.getNormalMatrix(n3x3);
-    corkShader.setMat3("uNormalMatrix", n3x3);
-
+    Mat4 mCork = Mat4::translate(flaskPos) * Mat4::translate(0.0f, 0.44f, 0.0f)
+               * Mat4::translate(potions.corkOffset)
+               * Mat4::rotateX(potions.corkSpinAngle) * Mat4::rotateZ(potions.corkSpinAngle * 0.7f);
+    uploadModelAndNormal(corkShader, mCork);
     corkMesh.draw();
 }
 
-void Scene::renderFlamesAndGlow(const Mat4& view, const Mat4& proj, const Vec3& cameraPos) {
-    if (!candlesLit) return;
+void Scene::renderRuneCircle(const Mat4& view, const Mat4& proj) {
+    glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE); glDepthMask(GL_FALSE);
+    runeShader.use();
+    runeShader.setMat4("uView", view); runeShader.setMat4("uProjection", proj);
+    runeShader.setFloat("uTime", timeElapsed); runeShader.setFloat("uRotation", runeRotation);
+    float activity = std::min(1.5f, slosh.waveAmplitude * 7.0f + getMagicResonance() * 1.15f + (isDragging ? 0.3f : 0.0f));
+    runeShader.setFloat("uActivity", activity);
+    runeShader.setVec3("uRuneColor", slosh.liquidColor.xyz());
+    runeTex.bind(0); runeShader.setInt("uRuneTexture", 0);
+    runeShader.setMat4("uModel", Mat4::translate(0.0f, 0.002f, 0.0f));
+    runePlaneMesh.draw();
+    glDepthMask(GL_TRUE); glDisable(GL_BLEND);
+}
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE); // Additive blending for radiant fire
-    glDepthMask(GL_FALSE);             // Avoid clipping transparent fire geometry
-
-    // 1. Render animated teardrop candle flames
-    flameShader.use();
-    flameShader.setMat4("uView", view);
-    flameShader.setMat4("uProjection", proj);
-    flameShader.setFloat("uTime", timeElapsed);
-
-    for (const auto& c : candles) {
-        Vec3 flamePos = c.position + Vec3(0.0f, c.height + 0.008f, 0.0f);
-        Mat4 mFlame = Mat4::translate(flamePos) * Mat4::scale(c.flameScale);
-        flameShader.setMat4("uModel", mFlame);
-        flameShader.setFloat("uSeed", c.seed);
-        flameMesh.draw();
-    }
-
-    // 2. Camera-facing billboard rotation matrix
-    Mat4 billboardRot = Mat4::identity();
-    billboardRot.at(0, 0) = view.at(0, 0); billboardRot.at(1, 0) = view.at(0, 1); billboardRot.at(2, 0) = view.at(0, 2);
-    billboardRot.at(0, 1) = view.at(1, 0); billboardRot.at(1, 1) = view.at(1, 1); billboardRot.at(2, 1) = view.at(1, 2);
-    billboardRot.at(0, 2) = view.at(2, 0); billboardRot.at(1, 2) = view.at(2, 1); billboardRot.at(2, 2) = view.at(2, 2);
-
-    // 3. Render soft golden light glow halos around candle flames
-    glowShader.use();
-    glowShader.setMat4("uView", view);
-    glowShader.setMat4("uProjection", proj);
-    glowShader.setVec3("uGlowColor", Vec3(1.0f, 0.68f, 0.22f));
-
-    for (size_t i = 0; i < candles.size(); ++i) {
-        const auto& c = candles[i];
-        float flicker = (i < 3) ? candleFlicker0 : candleFlicker1;
-        Vec3 haloPos = c.position + Vec3(0.0f, c.height + 0.055f, 0.0f);
-        float haloSize = 0.28f * c.flameScale;
-
-        Mat4 mHalo = Mat4::translate(haloPos) * billboardRot * Mat4::scale(haloSize);
-        glowShader.setMat4("uModel", mHalo);
-        glowShader.setFloat("uIntensity", 0.70f * flicker);
-        billboardMesh.draw();
-    }
-
-    // 4. Render inner ethereal aura inside the flask matching current potion color
-    Vec3 potionHaloPos = flaskPos + Vec3(0.0f, 0.16f, 0.0f);
-    float potionHaloSize = 0.44f;
-    Mat4 mPotionHalo = Mat4::translate(potionHaloPos) * billboardRot * Mat4::scale(potionHaloSize);
-    glowShader.setMat4("uModel", mPotionHalo);
-    glowShader.setVec3("uGlowColor", slosh.liquidColor.xyz());
-    float potionPulse = 0.50f + 0.18f * std::sin(timeElapsed * 3.5f);
-    glowShader.setFloat("uIntensity", potionPulse);
-    billboardMesh.draw();
-
-    glDepthMask(GL_TRUE);
+void Scene::renderLiquid(const Mat4& view, const Mat4& proj, const Vec3& cameraPos) {
+    glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    liquidShader.use();
+    liquidShader.setMat4("uView", view); liquidShader.setMat4("uProjection", proj);
+    liquidShader.setVec3("uCameraPos", cameraPos);
+    liquidShader.setVec4("uLiquidColor", slosh.liquidColor);
+    liquidShader.setFloat("uFillLevel", slosh.fillLevel);
+    liquidShader.setVec3("uSloshNormal", slosh.getSurfaceNormal());
+    liquidShader.setFloat("uFlaskMaxHeight", 0.46f);
+    liquidShader.setFloat("uTime", timeElapsed);
+    liquidShader.setFloat("uWaveAmp", slosh.waveAmplitude);
+    liquidShader.setFloat("uWavePhase", slosh.wavePhase);
+    setupCandleLights(liquidShader);
+    uploadModelAndNormal(liquidShader, Mat4::translate(flaskPos));
+    liquidShader.setBool("uIsTopCap", false); liquidMesh.draw();
+    liquidShader.setBool("uIsTopCap", true);  diskMesh.draw();
     glDisable(GL_BLEND);
+}
+
+void Scene::renderGlass(const Mat4& view, const Mat4& proj, const Vec3& cameraPos) {
+    glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); glEnable(GL_CULL_FACE);
+    glassShader.use();
+    glassShader.setMat4("uView", view); glassShader.setMat4("uProjection", proj);
+    glassShader.setVec3("uCameraPos", cameraPos);
+    setupCandleLights(glassShader);
+    uploadModelAndNormal(glassShader, Mat4::translate(flaskPos));
+    glCullFace(GL_FRONT); glassShader.setBool("uIsBackPass", true);  flaskMesh.draw();
+    glCullFace(GL_BACK);  glassShader.setBool("uIsBackPass", false); flaskMesh.draw();
+    glDisable(GL_CULL_FACE); glDisable(GL_BLEND);
+}
+
+void Scene::renderShockwave(const Mat4& view, const Mat4& proj) {
+    if (potions.shockwaveAlpha <= 0.01f) return;
+    glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE); glDepthMask(GL_FALSE);
+    standardShader.use();
+    standardShader.setMat4("uView", view); standardShader.setMat4("uProjection", proj);
+    standardShader.setBool("uUseTexture", false);
+    standardShader.setVec3("uDiffuseColor", Vec3(0.0f, 0.0f, 0.0f));
+    standardShader.setVec3("uSpecularColor", Vec3(0.0f, 0.0f, 0.0f));
+    standardShader.setFloat("uShininess", 1.0f);
+    standardShader.setVec3("uEmissive", Vec3(1.0f, 0.45f, 0.08f) * (potions.shockwaveAlpha * 2.2f));
+    uploadModelAndNormal(standardShader, Mat4::translate(flaskPos + Vec3(0.0f, 0.14f, 0.0f))
+                                       * Mat4::scale(potions.shockwaveRadius, 0.35f, potions.shockwaveRadius));
+    shockwaveMesh.draw();
+    glDepthMask(GL_TRUE); glDisable(GL_BLEND);
 }
