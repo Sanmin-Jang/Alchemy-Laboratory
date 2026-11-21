@@ -210,6 +210,17 @@ struct Mat4 {
         return res;
     }
 
+    static Mat4 ortho(float left, float right, float bottom, float top, float zNear = -1.0f, float zFar = 1.0f) {
+        Mat4 res = identity();
+        res.at(0, 0) = 2.0f / (right - left);
+        res.at(1, 1) = 2.0f / (top - bottom);
+        res.at(2, 2) = -2.0f / (zFar - zNear);
+        res.at(0, 3) = -(right + left) / (right - left);
+        res.at(1, 3) = -(top + bottom) / (top - bottom);
+        res.at(2, 3) = -(zFar + zNear) / (zFar - zNear);
+        return res;
+    }
+
     Mat4 inverse() const {
         Mat4 inv;
         float invArr[16];

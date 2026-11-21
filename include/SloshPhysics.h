@@ -25,8 +25,9 @@ public:
     float maxTiltAngle; // limit tilt so it doesn't escape the flask neck
 
     // Liquid properties
-    float fillLevel;    // 0.0 (empty) to 1.0 (full)
-    Vec4 liquidColor;   // RGBA color
+    float fillLevel;     // 0.0 (empty) to 1.0 (full)
+    float boilIntensity; // 0.0 (calm) to 1.0 (boiling reaction)
+    Vec4 liquidColor;    // RGBA color
 
     SloshPhysics();
 

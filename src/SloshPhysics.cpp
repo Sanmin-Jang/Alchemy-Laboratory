@@ -17,6 +17,7 @@ SloshPhysics::SloshPhysics()
       inertiaScale(0.18f),    // acceleration response
       maxTiltAngle(0.48f),    // ~27.5 degrees max surface tilt
       fillLevel(0.65f),       // default 65% full
+      boilIntensity(0.0f),    // calm initially
       liquidColor(0.15f, 0.95f, 0.35f, 0.88f) // glowing emerald potion
 {}
 
@@ -62,14 +63,15 @@ void SloshPhysics::update(const Vec3& newFlaskPos, float dt) {
         tiltVelocity = tiltVelocity * -0.3f;
     }
 
-    // 4. Update surface ripple wave phase and amplitude
-    float motionEnergy = velocity.length() * 0.4f + tiltVelocity.length() * 0.15f;
-    float targetAmp = std::min(0.08f, motionEnergy * 0.12f);
+    // 4. Update surface ripple wave phase and amplitude (including reaction boiling)
+    float motionEnergy = velocity.length() * 0.4f + tiltVelocity.length() * 0.15f + boilIntensity * 0.85f;
+    float targetAmp = std::min(0.09f, motionEnergy * 0.12f);
     waveAmplitude += (targetAmp - waveAmplitude) * (dt * 6.0f);
-    wavePhase += dt * (12.0f + motionEnergy * 8.0f);
+    wavePhase += dt * (12.0f + motionEnergy * 10.0f);
     if (wavePhase > 2.0f * (float)M_PI) {
         wavePhase = std::fmod(wavePhase, 2.0f * (float)M_PI);
     }
+    boilIntensity = std::max(0.0f, boilIntensity - dt * 0.25f);
 }
 
 void SloshPhysics::addImpulse(float impX, float impZ) {
