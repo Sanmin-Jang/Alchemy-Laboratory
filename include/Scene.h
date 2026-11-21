@@ -2,37 +2,33 @@
 #define SCENE_H
 
 #include <string>
-#include <vector>
 #include "math3d.h"
 #include "Shader.h"
 #include "Mesh.h"
 #include "Texture.h"
 #include "SloshPhysics.h"
-
-// Wax candle structure with individual position, sizing, and flame animation parameters
-struct Candle {
-    Vec3 position;    // Base position on table
-    float height;     // Height of wax cylinder
-    float radius;     // Radius of wax cylinder
-    float seed;       // Time offset for individual flame flicker
-    float flameScale; // Relative size of flame
-};
+#include "LabEnvironment.h"
+#include "PotionSystem.h"
+#include "ParticleSystem.h"
 
 class Scene {
 public:
-    // Core physics and interactive state
+    // Core modules
+    LabEnvironment env;
+    PotionSystem potions;
     SloshPhysics slosh;
+    ParticleSystem particles;
+
+    // Interactive main flask state
     Vec3 flaskPos;
     bool isDragging;
     float timeElapsed;
+    float runeRotation;
 
-    // Potion metadata & appearance
-    std::string potionName;
-    std::string colorName;
-    int currentColorIndex;
+    // Potion color interpolation
     Vec4 targetLiquidColor;
 
-    // Atmospheric lighting state
+    // Atmospheric candle lighting state
     bool candlesLit;
     float candleFlicker0;
     float candleFlicker1;
@@ -51,19 +47,21 @@ public:
     void adjustLiquidLevel(float delta);
     void stirPotion();
     void resetPotion();
-
-    // Color controls
-    void setColorPreset(int preset);
-    void cycleColor();
-
-    // Atmospheric candle controls
     void toggleCandles();
 
-    // Flask picking ray intersection
-    bool hitTestFlask(const Vec3& rayOrigin, const Vec3& rayDir, float& outDist) const;
+    // Potion mixing actions
+    bool addIngredient(IngredientType type);
+    PotionEffect brewPotion();
 
-    // Helper: calculate flask radius at a given height
-    static float getFlaskRadiusAtHeight(float h);
+    // Ray picking
+    bool hitTestFlask(const Vec3& rayOrigin, const Vec3& rayDir, float& outDist) const;
+    IngredientType hitTestIngredient(const Vec3& rayOrigin, const Vec3& rayDir) const;
+
+    // Camera shake offset for Explosion effect
+    Vec3 getCameraShakeOffset() const;
+
+    // Dynamic clear / fog color for atmospheric immersion
+    Vec3 getBackgroundFogColor() const;
 
 private:
     // Shaders
@@ -75,52 +73,37 @@ private:
     Shader runeShader;
     Shader glowShader;
 
-    // Procedural textures
-    Texture woodTex;
-    Texture stoneTex;
-    Texture parchmentTex;
+    // Textures
     Texture runeTex;
 
-    // Glassware & liquid meshes
+    // Main flask & ingredient bottle meshes
     Mesh flaskMesh;
     Mesh liquidMesh;
     Mesh diskMesh;
     Mesh corkMesh;
-
-    // Table & environment meshes
-    Mesh tableTopMesh;
-    Mesh tableLegMesh;
-    Mesh tableApronLongMesh;
-    Mesh tableApronShortMesh;
-    Mesh floorMesh;
-    Mesh backWallMesh;
     Mesh runePlaneMesh;
-    Mesh parchmentPlaneMesh;
+    Mesh shockwaveMesh;
 
-    // Candle meshes
-    Mesh candleWaxUnitMesh;
-    Mesh candleSaucerLeftMesh;
-    Mesh candleSaucerRightMesh;
-    Mesh candleWickMesh;
-    Mesh flameMesh;
-    Mesh billboardMesh;
-    Mesh waxDropMesh;
+    Mesh smallBottleGlassMesh;
+    Mesh smallBottleLiquidMesh;
+    Mesh smallBottleCorkMesh;
 
-    // Candle instances
-    std::vector<Candle> candles;
+    // Continuous particle spawn timers
+    float bubbleTimer;
+    float steamTimer;
+    float effectParticleTimer;
 
     // Render pipeline passes
-    void renderRoomAndTable(const Mat4& view, const Mat4& proj, const Vec3& cameraPos);
-    void renderCandles(const Mat4& view, const Mat4& proj, const Vec3& cameraPos);
-    void renderParchment(const Mat4& view, const Mat4& proj, const Vec3& cameraPos);
-    void renderRuneCircle(const Mat4& view, const Mat4& proj, const Vec3& cameraPos);
+    void setupStandardLights(const Shader& shader, const Vec3& cameraPos) const;
+    void setupCandleLights(const Shader& shader) const;
+    void renderIngredientBottles(const Mat4& view, const Mat4& proj, const Vec3& cameraPos);
+    void renderCork(const Mat4& view, const Mat4& proj, const Vec3& cameraPos);
+    void renderRuneCircle(const Mat4& view, const Mat4& proj);
     void renderLiquid(const Mat4& view, const Mat4& proj, const Vec3& cameraPos);
     void renderGlass(const Mat4& view, const Mat4& proj, const Vec3& cameraPos);
-    void renderCork(const Mat4& view, const Mat4& proj, const Vec3& cameraPos);
-    void renderFlamesAndGlow(const Mat4& view, const Mat4& proj, const Vec3& cameraPos);
+    void renderShockwave(const Mat4& view, const Mat4& proj);
 
-    // Light helper
-    void setupLights(const Shader& shader, const Vec3& cameraPos) const;
+    float getMagicResonance() const;
 };
 
 #endif // SCENE_H
