@@ -20,16 +20,25 @@ set(SOURCES
     src/Mesh.cpp
     src/Texture.cpp
     src/SloshPhysics.cpp
+    src/LabEnvironment.cpp
+    src/PotionSystem.cpp
+    src/ParticleSystem.cpp
+    src/UIRenderer.cpp
     src/Scene.cpp
 )
 
 set(HEADERS
     include/math3d.h
+    include/BitmapFont.h
     include/Shader.h
     include/Camera.h
     include/Mesh.h
     include/Texture.h
     include/SloshPhysics.h
+    include/LabEnvironment.h
+    include/PotionSystem.h
+    include/ParticleSystem.h
+    include/UIRenderer.h
     include/Scene.h
 )
 
