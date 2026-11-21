@@ -450,3 +450,34 @@ Mesh Mesh::createBillboard(float size) {
     mesh.setupMesh(vertices, indices);
     return mesh;
 }
+
+Mesh Mesh::createTorus(float majorRadius, float minorRadius, int majorSegs, int minorSegs) {
+    Mesh mesh;
+    std::vector<Vertex> vertices;
+    std::vector<unsigned int> indices;
+    for (int i = 0; i <= majorSegs; ++i) {
+        float u = (float)i / majorSegs;
+        float theta = u * 2.0f * (float)M_PI;
+        float ct = std::cos(theta), st = std::sin(theta);
+        for (int j = 0; j <= minorSegs; ++j) {
+            float v = (float)j / minorSegs;
+            float phi = v * 2.0f * (float)M_PI;
+            float cp = std::cos(phi), sp = std::sin(phi);
+            float r = majorRadius + minorRadius * cp;
+            Vec3 pos(r * ct, minorRadius * sp, r * st);
+            Vec3 norm(cp * ct, sp, cp * st);
+            vertices.emplace_back(pos, norm.normalized(), Vec2(u * 4.0f, v));
+        }
+    }
+    int ring = minorSegs + 1;
+    for (int i = 0; i < majorSegs; ++i) {
+        for (int j = 0; j < minorSegs; ++j) {
+            int a = i * ring + j;
+            int b = (i + 1) * ring + j;
+            indices.push_back(a); indices.push_back(b); indices.push_back(b + 1);
+            indices.push_back(a); indices.push_back(b + 1); indices.push_back(a + 1);
+        }
+    }
+    mesh.setupMesh(vertices, indices);
+    return mesh;
+}
